@@ -1,35 +1,43 @@
 from flask import Flask, request, jsonify
 import mediapipe as mp
+import cv2
 import numpy as np
 import base64
 import io
 from PIL import Image
-import requests
 
 app = Flask(__name__)
 
-# Initialize MediaPipe face detection and face mesh
+# Initialize MediaPipe Face Detection model
 mp_face_detection = mp.solutions.face_detection
-mp_face_mesh = mp.solutions.face_mesh
+face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
+mp_drawing = mp.solutions.drawing_utils
 
-# Function to generate a fingerprint (face embedding) using MediaPipe
+# Function to generate a fingerprint (face embedding) from the image data
 def generate_fingerprint(image_data):
-    # Load the image
+    # Convert byte data to an image
     image = Image.open(io.BytesIO(image_data))
-    image = np.array(image)
+    # Convert the image to RGB
+    image = np.array(image.convert('RGB'))
+    
+    # Convert image to RGB and process it with MediaPipe
+    results = face_detection.process(image)
+    
+    if results.detections:
+        # Extract face landmarks
+        for detection in results.detections:
+            # Get bounding box information
+            bboxC = detection.location_data.relative_bounding_box
+            ih, iw, _ = image.shape
+            x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+            face_image = image[y:y+h, x:x+w]  # Crop the face area
 
-    with mp_face_mesh.FaceMesh(static_image_mode=True) as face_mesh:
-        # Convert image to RGB
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        results = face_mesh.process(image_rgb)
-        
-        # If a face is detected, generate an embedding based on facial landmarks
-        if results.multi_face_landmarks:
-            landmarks = results.multi_face_landmarks[0].landmark
-            face_embedding = [landmark.x for landmark in landmarks] + [landmark.y for landmark in landmarks] + [landmark.z for landmark in landmarks]
-            return np.array(face_embedding).tolist()
-        else:
-            return None
+            # Encode the cropped face image into a fingerprint (encoding)
+            fingerprint = np.array(face_image).flatten().tolist()  # Simple flattening for example
+            
+            return fingerprint
+    else:
+        return None
 
 # Route to process the image
 @app.route('/process-image', methods=['POST'])
@@ -39,7 +47,7 @@ def process_image():
         data = request.json
         # Decode the base64 image data
         image_data = base64.b64decode(data['image'].split(',')[1])
-        # Generate the fingerprint (embedding)
+        # Generate the fingerprint
         fingerprint = generate_fingerprint(image_data)
 
         # If a face is detected, send data to the Node.js backend
@@ -64,4 +72,4 @@ def process_image():
 
 # Run the Flask application
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
