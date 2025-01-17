@@ -1,0 +1,5 @@
+Flask
+face_recognition
+numpy
+requests
+pillow
