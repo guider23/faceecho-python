@@ -9,6 +9,9 @@ import requests
 
 app = Flask(__name__)
 
+# Set the maximum content length (e.g., 10 MB)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB
+
 # Initialize MediaPipe Face Detection model
 mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
