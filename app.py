@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import face_recognition
+import mediapipe as mp
 import numpy as np
 import base64
 import io
@@ -8,17 +8,28 @@ import requests
 
 app = Flask(__name__)
 
-# Function to generate a fingerprint (face embedding) from the image data
+# Initialize MediaPipe face detection and face mesh
+mp_face_detection = mp.solutions.face_detection
+mp_face_mesh = mp.solutions.face_mesh
+
+# Function to generate a fingerprint (face embedding) using MediaPipe
 def generate_fingerprint(image_data):
     # Load the image
-    image = face_recognition.load_image_file(io.BytesIO(image_data))
-    # Generate face encodings
-    face_encodings = face_recognition.face_encodings(image)
-    # Return the first face encoding if a face is detected
-    if len(face_encodings) > 0:
-        return np.array(face_encodings[0]).tolist()
-    else:
-        return None
+    image = Image.open(io.BytesIO(image_data))
+    image = np.array(image)
+
+    with mp_face_mesh.FaceMesh(static_image_mode=True) as face_mesh:
+        # Convert image to RGB
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(image_rgb)
+        
+        # If a face is detected, generate an embedding based on facial landmarks
+        if results.multi_face_landmarks:
+            landmarks = results.multi_face_landmarks[0].landmark
+            face_embedding = [landmark.x for landmark in landmarks] + [landmark.y for landmark in landmarks] + [landmark.z for landmark in landmarks]
+            return np.array(face_embedding).tolist()
+        else:
+            return None
 
 # Route to process the image
 @app.route('/process-image', methods=['POST'])
@@ -28,7 +39,7 @@ def process_image():
         data = request.json
         # Decode the base64 image data
         image_data = base64.b64decode(data['image'].split(',')[1])
-        # Generate the fingerprint
+        # Generate the fingerprint (embedding)
         fingerprint = generate_fingerprint(image_data)
 
         # If a face is detected, send data to the Node.js backend
