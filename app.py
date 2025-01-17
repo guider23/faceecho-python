@@ -5,6 +5,7 @@ import numpy as np
 import base64
 import io
 from PIL import Image
+import requests
 
 app = Flask(__name__)
 
